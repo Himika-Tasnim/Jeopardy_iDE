@@ -27,6 +27,71 @@ const exitBtn = document.getElementById("exit-btn");
 const submitAnswerBtn = document.getElementById("submit-answer-btn");
 const scoreDiv = document.getElementById("score");
 
+// Session / backend function controls
+const startGameBtn = document.getElementById('start-game-btn');
+const endGameBtn = document.getElementById('end-game-btn');
+const sessionInfo = document.getElementById('session-info');
+let sessionId = null;
+const FN_BASE = '/.netlify/functions'; // adjust if calling deployed endpoints
+
+async function startGame() {
+  try {
+    startGameBtn.disabled = true;
+    sessionInfo.textContent = 'Starting...';
+    const res = await fetch(`${FN_BASE}/launch-game`, { method: 'GET' });
+    if (!res.ok) throw new Error('Launch failed: ' + res.status);
+    const data = await res.json();
+    sessionId = data.sessionId;
+    sessionInfo.textContent = `Session: ${sessionId} — ${data.gameUrl || ''}`;
+    endGameBtn.style.display = 'inline-block';
+  } catch (err) {
+    sessionInfo.textContent = 'Failed to start session';
+    console.error(err);
+    alert('Could not start game session: ' + err.message);
+  } finally {
+    startGameBtn.disabled = false;
+  }
+}
+
+async function endGame() {
+  if (!sessionId) {
+    alert('No active session. Start the game first.');
+    return;
+  }
+  const playerName = prompt('Enter player name (optional):', 'player') || 'player';
+  const payload = {
+    sessionId: String(sessionId),
+    playerName,
+    score,
+    metadata: { endedAt: Date.now() }
+  };
+  try {
+    endGameBtn.disabled = true;
+    const res = await fetch(`${FN_BASE}/submit-result`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json && json.message ? json.message : res.statusText);
+    alert('Result submitted. ID: ' + (json.insertedId || json.message || 'ok'));
+    // hide end button after submit
+    endGameBtn.style.display = 'none';
+    sessionInfo.textContent = `Last session: ${sessionId}`;
+    // Optionally reset sessionId so user can start a new game
+    sessionId = null;
+  } catch (err) {
+    console.error('submit error', err);
+    alert('Failed to submit result: ' + (err.message || err));
+  } finally {
+    endGameBtn.disabled = false;
+  }
+}
+
+// Wire session buttons if present
+if (startGameBtn) startGameBtn.addEventListener('click', startGame);
+if (endGameBtn) endGameBtn.addEventListener('click', endGame);
+
 const modal = document.getElementById("modal");
 const modalMsg = document.getElementById("modal-message");
 const modalChoices = document.getElementById("modal-choices");

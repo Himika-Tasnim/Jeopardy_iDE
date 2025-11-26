@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Jeopardy - Test Site</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;padding:1rem}
+    .box{border:1px solid #ddd;padding:1rem;margin-bottom:1rem;border-radius:6px}
+    label{display:block;margin-top:.5rem}
+    button{margin:.5rem 0}
+    pre{background:#f6f6f6;padding:.5rem;border-radius:4px}
+    #results{max-height:300px;overflow:auto}
+  </style>
+</head>
+<body>
+  <h2>Test Site (separate)</h2>
+  <p>This page simulates a separate site that calls your Netlify functions. Set the function base URL depending on whether you're running Netlify Dev or using a deployed site.</p>
+
+  <div class="box">
+    <label>Functions base URL (default for Netlify Dev):</label>
+    <input id="fnBase" style="width:100%" value="http://localhost:8888/.netlify/functions" />
+  </div>
+
+  <div class="box">
+    <h3>Session</h3>
+    <button id="startBtn">Start Game (launch-game)</button>
+    <button id="endBtn" disabled>End Game (submit-result)</button>
+    <button id="showBtn" disabled>Show Results (view-result)</button>
+    <div id="sessionDisplay" style="margin-top:.5rem;color:#333"></div>
+  </div>
+
+  <div class="box">
+    <h3>Result payload</h3>
+    <label>Player name: <input id="playerName" value="test-player" /></label>
+    <label>Score: <input id="score" type="number" value="1000" /></label>
+    <label>Extra metadata (JSON): <input id="metadata" value='{"note":"from test site"}' style="width:100%" /></label>
+    <div id="submitResponse"></div>
+  </div>
+
+  <div class="box">
+    <h3>Results</h3>
+    <div id="results"></div>
+  </div>
+
+  <script>
+    const startBtn = document.getElementById('startBtn');
+    const endBtn = document.getElementById('endBtn');
+    const showBtn = document.getElementById('showBtn');
+    const fnBaseInput = document.getElementById('fnBase');
+    const sessionDisplay = document.getElementById('sessionDisplay');
+    const playerName = document.getElementById('playerName');
+    const scoreInput = document.getElementById('score');
+    const metadataInput = document.getElementById('metadata');
+    const submitResponse = document.getElementById('submitResponse');
+    const resultsDiv = document.getElementById('results');
+
+    let sessionId = null;
+    function fnBase() { return fnBaseInput.value.replace(/\/$/, ''); }
+
+    startBtn.addEventListener('click', async () => {
+      sessionDisplay.textContent = 'Starting...';
+      try {
+        const res = await fetch(`${fnBase()}/launch-game`, { method: 'GET' });
+        if(!res.ok) throw new Error('HTTP ' + res.status);
+        const json = await res.json();
+        sessionId = json.sessionId;
+        sessionDisplay.innerHTML = `Session: <strong>${sessionId}</strong> <br/> Game URL: <a href="${json.gameUrl}" target="_blank">${json.gameUrl}</a>`;
+        endBtn.disabled = false;
+        showBtn.disabled = false;
+        submitResponse.innerHTML = '';
+        resultsDiv.innerHTML = '';
+      } catch (err) {
+        sessionDisplay.textContent = 'Start failed: ' + err.message;
+        console.error(err);
+      }
+    });
+
+    endBtn.addEventListener('click', async () => {
+      if(!sessionId) { alert('No session - press Start Game first'); return; }
+      const payload = {
+        sessionId: String(sessionId),
+        playerName: playerName.value || 'player',
+        score: Number(scoreInput.value) || 0,
+      };
+      try {
+        // attempt to parse metadata JSON if provided
+        try { payload.metadata = JSON.parse(metadataInput.value); } catch(e) { payload.metadata = { raw: metadataInput.value }; }
+        submitResponse.innerHTML = 'Submitting...';
+        const res = await fetch(`${fnBase()}/submit-result`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const json = await res.json();
+        if(!res.ok) throw new Error(json && json.message ? json.message : res.statusText);
+        submitResponse.innerHTML = `<pre>${JSON.stringify(json, null, 2)}</pre>`;
+      } catch (err) {
+        submitResponse.innerHTML = 'Submit failed: ' + err.message;
+        console.error(err);
+      }
+    });
+
+    showBtn.addEventListener('click', async () => {
+      if(!sessionId) { alert('No session - press Start Game first'); return; }
+      resultsDiv.innerHTML = 'Loading...';
+      try {
+        const res = await fetch(`${fnBase()}/view-result?sessionId=${encodeURIComponent(sessionId)}`);
+        const json = await res.json();
+        if(!res.ok) throw new Error(json && json.message ? json.message : res.statusText);
+        resultsDiv.innerHTML = `<pre>${JSON.stringify(json, null, 2)}</pre>`;
+      } catch (err) {
+        resultsDiv.innerHTML = 'Fetch failed: ' + err.message;
+        console.error(err);
+      }
+    });
+  </script>
+</body>
+</html>
