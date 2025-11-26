@@ -67,18 +67,39 @@ window.addEventListener('message', (ev) => {
 }, false);
 
 async function endGame() {
-  // If sessionId not set in-app, try to read from localStorage (set by test-site) or ask user to paste it
+  // Ensure we pick up the sessionId from URL/hash/localStorage each time (so URL-driven sessions are used)
+  function readSessionFromSources() {
+    // query param
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const q = params.get('sessionId');
+      if (q) return String(q);
+    } catch (e) {}
+    // hash like #sessionId=...
+    try {
+      if (window.location.hash && window.location.hash.includes('sessionId')) {
+        const hash = window.location.hash.replace(/^#/, '');
+        const p = new URLSearchParams(hash);
+        const h = p.get('sessionId');
+        if (h) return String(h);
+      }
+    } catch (e) {}
+    // localStorage fallback
+    try { const s = localStorage.getItem('testSessionId'); if (s) return String(s); } catch (e) {}
+    return null;
+  }
+
+  const picked = readSessionFromSources();
+  if (picked) {
+    sessionId = picked;
+    if (sessionInfo) sessionInfo.textContent = `Using session: ${sessionId}`;
+  }
+
   if (!sessionId) {
-    const fromStorage = localStorage.getItem('testSessionId');
-    if (fromStorage) {
-      sessionId = fromStorage;
-      sessionInfo.textContent = `Using session from storage: ${sessionId}`;
-    } else {
-      const manual = prompt('No active session in this app. Paste sessionId from test site (or cancel):');
-      if (!manual) return;
-      sessionId = manual.trim();
-      sessionInfo.textContent = `Using session (manual): ${sessionId}`;
-    }
+    const manual = prompt('No active session in this app. Paste sessionId from test site (or cancel):');
+    if (!manual) return;
+    sessionId = manual.trim();
+    if (sessionInfo) sessionInfo.textContent = `Using session (manual): ${sessionId}`;
   }
 
   const playerName = prompt('Enter player name (optional):', 'player') || 'player';
@@ -98,11 +119,10 @@ async function endGame() {
     const json = await res.json();
     if (!res.ok) throw new Error(json && json.message ? json.message : res.statusText);
     alert('Result submitted. ID: ' + (json.insertedId || json.message || 'ok'));
-    // hide end button after submit
-    endGameBtn.style.display = 'none';
-    sessionInfo.textContent = `Last session: ${sessionId}`;
-    // Optionally reset sessionId so user can start a new game
-    sessionId = null;
+  // hide end button after submit
+  endGameBtn.style.display = 'none';
+  sessionInfo.textContent = `Last session: ${sessionId}`;
+  // keep sessionId so it's consistent with the URL during the play session
   } catch (err) {
     console.error('submit error', err);
     alert('Failed to submit result: ' + (err.message || err));
