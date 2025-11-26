@@ -1,3 +1,4 @@
+
 const categories = [
   "Market Systems & Livelihood Goals",
   "Stakeholder & Ecosystem Mapping",
@@ -14,6 +15,11 @@ import questions from './questionData.js';
 let currentIndex = null;
 let score = 0;
 let answerSubmitted = false;
+
+// serialization guards for opening questions
+let isTransitioning = false;
+const _openQueue = [];
+let _openProcessing = false;
 
 const board = document.getElementById("game-board");
 const questionScreen = document.getElementById("question-screen");
@@ -57,6 +63,8 @@ window.addEventListener('message', (ev) => {
     if (msg && msg.type === 'session' && msg.sessionId) {
       sessionId = String(msg.sessionId);
       try { localStorage.setItem('testSessionId', sessionId); } catch (e) {}
+      // optional UI element may not exist in the app; guard before writing
+      const sessionInfo = document.getElementById('session-info');
       if (sessionInfo) sessionInfo.textContent = `Using session from test site: ${sessionId}`;
     }
   } catch (e) {
@@ -120,9 +128,9 @@ async function endGame() {
     } catch (e) {
       try { const text = await res.text(); json = { raw: 'Non-JSON response', text }; } catch { json = { raw: 'Non-JSON response' }; }
     }
-  if (!res.ok) throw new Error((json && json.message) ? json.message : (json && json.raw) ? JSON.stringify(json) : res.statusText);
-  // on success: quietly hide the end button (no popup)
-  endGameBtn.style.display = 'none';
+    if (!res.ok) throw new Error((json && json.message) ? json.message : (json && json.raw) ? JSON.stringify(json) : res.statusText);
+    // on success: quietly hide the end button (no popup)
+    endGameBtn.style.display = 'none';
     // keep sessionId so it's consistent with the URL during the play session
   } catch (err) {
     console.error('submit error', err);
@@ -134,7 +142,6 @@ async function endGame() {
 
 // Wire end-game button
 if (endGameBtn) endGameBtn.addEventListener('click', endGame);
-
 const modal = document.getElementById("modal");
 const modalMsg = document.getElementById("modal-message");
 const modalChoices = document.getElementById("modal-choices");
@@ -202,6 +209,7 @@ function buildBoard() {
       } else {
         tile.innerText = q.points;
         tile.onclick = () => {
+          if (isTransitioning) return; // ignore clicks while transitioning
           if (!canOpenQuestion(q)) {
             alert("⚠️ Please complete the previous questions first.");
             return;
@@ -215,40 +223,65 @@ function buildBoard() {
   }
 }
 
+// Queue-based opener: ensure only one open runs at a time
 function openQuestion(index) {
-  const q = questions[index];
+  _openQueue.push(index);
+  processOpenQueue();
+}
 
-  // ✅ enforce rules here too
-  if (!canOpenQuestion(q)) {
-    alert("⚠️ Please complete the previous questions first.");
-    return;
-  }
+function processOpenQueue() {
+  if (_openProcessing) return;
+  _openProcessing = true;
 
-  currentIndex = index;
-  questionText.innerText = q.q;
-  feedback.innerText = "";
-  answerArea.style.display = "none";
-  choicesDiv.innerHTML = "";
+  const run = async () => {
+    while (_openQueue.length) {
+      const index = _openQueue.shift();
+      // synchronous guard
+      if (isTransitioning) continue;
+      isTransitioning = true;
+      try {
+        const q = questions[index];
 
-  q.options.forEach((opt, idx) => {
-    const label = document.createElement("label");
-    const radio = document.createElement("input");
-    radio.type = "radio";
-    radio.name = "answer";
-    radio.value = opt;
-    if (idx === 0) radio.checked = true;
-    label.appendChild(radio);
-    label.appendChild(document.createTextNode(opt));
-    choicesDiv.appendChild(label);
-  });
+        // ✅ enforce rules here too
+        if (!canOpenQuestion(q)) {
+          // skip opening this queued item if rules prevent it
+          continue;
+        }
 
-  questionScreen.style.display = "flex";
-  board.style.display = "none";
+        currentIndex = index;
+        questionText.innerText = q.q;
+        feedback.innerText = "";
+        answerArea.style.display = "none";
+        choicesDiv.innerHTML = "";
 
-  revealBtn.disabled = false;
-  giveAnswerBtn.disabled = false;
-  exitBtn.disabled = false;
-  submitAnswerBtn.disabled = false;
+        q.options.forEach((opt, idx) => {
+          const label = document.createElement("label");
+          const radio = document.createElement("input");
+          radio.type = "radio";
+          radio.name = "answer";
+          radio.value = opt;
+          if (idx === 0) radio.checked = true;
+          label.appendChild(radio);
+          label.appendChild(document.createTextNode(opt));
+          choicesDiv.appendChild(label);
+        });
+
+        questionScreen.style.display = "flex";
+        board.style.display = "none";
+
+        revealBtn.disabled = false;
+        giveAnswerBtn.disabled = false;
+        exitBtn.disabled = false;
+        submitAnswerBtn.disabled = false;
+      } finally {
+        // small async delay to let the DOM settle before next open
+        await new Promise(r => setTimeout(r, 30));
+        isTransitioning = false;
+      }
+    }
+    _openProcessing = false;
+  };
+  run();
 }
 
 function revealAnswer() {
