@@ -29,7 +29,6 @@ const scoreDiv = document.getElementById("score");
 
 // Session / backend function controls
 const endGameBtn = document.getElementById('end-game-btn');
-const sessionInfo = document.getElementById('session-info');
 let sessionId = null;
 const FN_BASE = '/.netlify/functions'; // adjust if calling deployed endpoints
 
@@ -48,7 +47,6 @@ const qsSession = getQueryParam('sessionId');
 if (qsSession) {
   sessionId = String(qsSession);
   try { localStorage.setItem('testSessionId', sessionId); } catch (e) {}
-  if (sessionInfo) sessionInfo.textContent = `Using session from URL: ${sessionId}`;
 }
 
 // Listen for postMessage from a test harness (e.g. tests/test-site.html)
@@ -92,14 +90,12 @@ async function endGame() {
   const picked = readSessionFromSources();
   if (picked) {
     sessionId = picked;
-    if (sessionInfo) sessionInfo.textContent = `Using session: ${sessionId}`;
   }
 
   if (!sessionId) {
     const manual = prompt('No active session in this app. Paste sessionId from test site (or cancel):');
     if (!manual) return;
     sessionId = manual.trim();
-    if (sessionInfo) sessionInfo.textContent = `Using session (manual): ${sessionId}`;
   }
 
   const playerName = prompt('Enter player name (optional):', 'player') || 'player';
@@ -116,13 +112,19 @@ async function endGame() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json && json.message ? json.message : res.statusText);
-    alert('Result submitted. ID: ' + (json.insertedId || json.message || 'ok'));
-  // hide end button after submit
-  endGameBtn.style.display = 'none';
-  sessionInfo.textContent = `Last session: ${sessionId}`;
-  // keep sessionId so it's consistent with the URL during the play session
+    // Safely parse JSON (handle empty or non-JSON responses)
+    let json = null;
+    try {
+      const text = await res.text();
+      json = text ? JSON.parse(text) : null;
+    } catch (e) {
+      try { const text = await res.text(); json = { raw: 'Non-JSON response', text }; } catch { json = { raw: 'Non-JSON response' }; }
+    }
+    if (!res.ok) throw new Error((json && json.message) ? json.message : (json && json.raw) ? JSON.stringify(json) : res.statusText);
+    alert('Result submitted. ID: ' + (json && (json.insertedId || json.message) ? (json.insertedId || json.message) : 'ok'));
+    // hide end button after submit
+    endGameBtn.style.display = 'none';
+    // keep sessionId so it's consistent with the URL during the play session
   } catch (err) {
     console.error('submit error', err);
     alert('Failed to submit result: ' + (err.message || err));
