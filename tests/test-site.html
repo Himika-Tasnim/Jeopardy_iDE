@@ -27,6 +27,9 @@
     <button id="startBtn">Start Game (launch-game)</button>
     <button id="endBtn" disabled>End Game (submit-result)</button>
     <button id="showBtn" disabled>Show Results (view-result)</button>
+    <label style="margin-top:.5rem">App URL to open (optional):</label>
+    <input id="appUrl" style="width:100%" value="http://localhost:8888/index.html" />
+    <button id="openAppBtn" disabled>Open App with session (query param + postMessage)</button>
     <div id="sessionDisplay" style="margin-top:.5rem;color:#333"></div>
   </div>
 
@@ -74,11 +77,34 @@
   showBtn.disabled = false;
   submitResponse.innerHTML = '';
   resultsDiv.innerHTML = '';
+    // enable open app button when available
+    const openAppBtn = document.getElementById('openAppBtn');
+    if (openAppBtn) openAppBtn.disabled = false;
       } catch (err) {
         sessionDisplay.textContent = 'Start failed: ' + err.message;
         console.error(err);
       }
     });
+
+    // Open the app in a new tab/window with sessionId in the query and also postMessage the session
+    const openAppBtn = document.getElementById('openAppBtn');
+    const appUrlInput = document.getElementById('appUrl');
+    if (openAppBtn) {
+      openAppBtn.addEventListener('click', () => {
+        if (!sessionId) { alert('No session - press Start Game first'); return; }
+        const base = (appUrlInput && appUrlInput.value) ? appUrlInput.value.replace(/\/$/, '') : window.location.origin;
+        const url = base + (base.indexOf('?') === -1 ? '?' : '&') + 'sessionId=' + encodeURIComponent(sessionId);
+        const newWin = window.open(url, '_blank');
+        // try to send a postMessage as well (if same browser) - best-effort
+        setTimeout(() => {
+          try {
+            newWin && newWin.postMessage({ type: 'session', sessionId: String(sessionId) }, '*');
+          } catch (e) {
+            // ignore
+          }
+        }, 500);
+      });
+    }
 
     endBtn.addEventListener('click', async () => {
       if(!sessionId) { alert('No session - press Start Game first'); return; }

@@ -33,6 +33,39 @@ const sessionInfo = document.getElementById('session-info');
 let sessionId = null;
 const FN_BASE = '/.netlify/functions'; // adjust if calling deployed endpoints
 
+// Accept sessionId from query param or from postMessage (sent by test-site)
+function getQueryParam(name) {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get(name);
+  } catch (e) {
+    return null;
+  }
+}
+
+// If sessionId is present in the URL (e.g. ?sessionId=...), use it automatically
+const qsSession = getQueryParam('sessionId');
+if (qsSession) {
+  sessionId = String(qsSession);
+  try { localStorage.setItem('testSessionId', sessionId); } catch (e) {}
+  if (sessionInfo) sessionInfo.textContent = `Using session from URL: ${sessionId}`;
+}
+
+// Listen for postMessage from a test harness (e.g. tests/test-site.html)
+window.addEventListener('message', (ev) => {
+  // Expect messages like: { type: 'session', sessionId: '...' }
+  try {
+    const msg = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
+    if (msg && msg.type === 'session' && msg.sessionId) {
+      sessionId = String(msg.sessionId);
+      try { localStorage.setItem('testSessionId', sessionId); } catch (e) {}
+      if (sessionInfo) sessionInfo.textContent = `Using session from test site: ${sessionId}`;
+    }
+  } catch (e) {
+    // ignore invalid messages
+  }
+}, false);
+
 async function endGame() {
   // If sessionId not set in-app, try to read from localStorage (set by test-site) or ask user to paste it
   if (!sessionId) {
