@@ -120,10 +120,9 @@ async function endGame() {
     } catch (e) {
       try { const text = await res.text(); json = { raw: 'Non-JSON response', text }; } catch { json = { raw: 'Non-JSON response' }; }
     }
-    if (!res.ok) throw new Error((json && json.message) ? json.message : (json && json.raw) ? JSON.stringify(json) : res.statusText);
-    alert('Result submitted. ID: ' + (json && (json.insertedId || json.message) ? (json.insertedId || json.message) : 'ok'));
-    // hide end button after submit
-    endGameBtn.style.display = 'none';
+  if (!res.ok) throw new Error((json && json.message) ? json.message : (json && json.raw) ? JSON.stringify(json) : res.statusText);
+  // on success: quietly hide the end button (no popup)
+  endGameBtn.style.display = 'none';
     // keep sessionId so it's consistent with the URL during the play session
   } catch (err) {
     console.error('submit error', err);
