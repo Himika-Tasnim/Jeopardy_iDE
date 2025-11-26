@@ -64,12 +64,16 @@
         const res = await fetch(`${fnBase()}/launch-game`, { method: 'GET' });
         if(!res.ok) throw new Error('HTTP ' + res.status);
         const json = await res.json();
-        sessionId = json.sessionId;
-        sessionDisplay.innerHTML = `Session: <strong>${sessionId}</strong> <br/> Game URL: <a href="${json.gameUrl}" target="_blank">${json.gameUrl}</a>`;
-        endBtn.disabled = false;
-        showBtn.disabled = false;
-        submitResponse.innerHTML = '';
-        resultsDiv.innerHTML = '';
+  sessionId = json.sessionId;
+  // store sessionId in localStorage for convenience (app can read it)
+  try { localStorage.setItem('testSessionId', String(sessionId)); } catch (e) { /* ignore */ }
+  // copy to clipboard for easy paste into the app if separate origin
+  try { navigator.clipboard && navigator.clipboard.writeText(String(sessionId)); } catch(e) {}
+  sessionDisplay.innerHTML = `Session: <strong>${sessionId}</strong> <br/> Game URL: <a href="${json.gameUrl}" target="_blank">${json.gameUrl}</a> <br/><small>session id copied to clipboard / saved to localStorage</small>`;
+  endBtn.disabled = false;
+  showBtn.disabled = false;
+  submitResponse.innerHTML = '';
+  resultsDiv.innerHTML = '';
       } catch (err) {
         sessionDisplay.textContent = 'Start failed: ' + err.message;
         console.error(err);
